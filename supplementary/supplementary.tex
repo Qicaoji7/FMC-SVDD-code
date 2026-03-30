@@ -1,0 +1,94 @@
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue]{hyperref}
+\newtheorem{assumption}{Assumption}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+
+\begin{document}
+
+\title{Supplementary Material for ``Federated Multi-Center Deep SVDD\\with Lyapunov Convergence Guarantees\\for Anomaly Detection in IIoT Networks''}
+
+\maketitle
+
+\noindent This document provides extended theoretical derivations and discussions that complement the main paper.
+
+\tableofcontents
+\bigskip
+
+%% ================================================================
+\section{Signal Lag Handling in RAA Weights}
+\label{sup:signal-lag}
+
+The RAA weights $w_m^t$ depend on the one-round-lagged inflation signal $\Delta R_m^t$. Because $w_m^t$ is determined before the round-$t$ aggregation, it can be treated as a constant when taking conditional expectations. Under Assumption~4 (bounded heterogeneity), an explicit lower bound on $w_{\min}^t$ can be derived, guaranteeing the existence of the descent term in Theorem~2.
+
+
+%% ================================================================
+\section{Comparison with Standard FedAvg Convergence}
+\label{sup:fedavg-comparison}
+
+Theorem~2 differs structurally from standard convergence results for FedAvg under convex/non-convex settings. FedAvg convergence analysis tracks the global loss $\mathcal{L}(\mathbf{W}) = \sum_m p_m \mathcal{L}_m(\mathbf{W})$ and converges to the global average optimum. Such a result provides no control over individual site losses; the global average may decrease while individual site losses continue to rise.
+
+Theorem~2 tracks $\max_m \mathcal{L}_m(\mathbf{W})$ and converges to a neighborhood of the minimax optimum. This stronger guarantee directly precludes any site's loss from diverging. The cost is a $w_{\min}^t$ factor in the convergence rate, which may make convergence slower than FedAvg. This is an inherent trade-off between fairness and efficiency.
+
+
+%% ================================================================
+\section{Extended DRO Motivation}
+\label{sup:dro-motivation}
+
+RAA's negative feedback mechanism relies on the inflation signal $\Delta R_m^t$ to adjust weights, with feedback intensity controlled by the hyperparameter $\gamma$. Theorem~2 guarantees convergence for fixed $\gamma$, but the optimal $\gamma$ depends on the magnitude of inter-site distribution shift. Larger shift produces more severe inflation and demands stronger feedback. In practice, the shift magnitude $\sigma_{\mathrm{het}}^2$ is unknown and may vary over time. If $\gamma$ is too small, feedback is insufficient to suppress inflation; if too large, weights oscillate.
+
+A more fundamental difficulty is that even with a well-chosen $\gamma$, RAA's weight formula implicitly assumes that the inflation signal $\Delta R_m^t$ accurately reflects the degree of inter-site distributional conflict. Yet $\Delta R_m^t$ is only a one-round-lagged scalar observation and may produce misleading signals due to stochastic gradient noise. An accidental radius fluctuation at one site could be misinterpreted as systematic inflation, triggering excessive weight adjustment.
+
+We introduce Wasserstein distributionally robust optimization (DRO) to address both layers of uncertainty. Rather than assuming a known distribution shift magnitude, we optimize aggregation weights for the worst-case distribution within an uncertainty set centered on the observed empirical distribution with a Wasserstein-distance radius. This makes RAA's weight design robust to distributional uncertainty.
+
+
+%% ================================================================
+\section{Theoretical Assumptions and Practical Gaps}
+\label{sup:assumptions}
+
+The theoretical analysis rests on several standard assumptions, and their applicability in real industrial deployments warrants discussion.
+
+\textbf{Lipschitz continuity (Assumption~1).}
+This requires the encoder to be Lipschitz continuous with respect to its parameters. For networks with ReLU activations and bounded weights, this holds naturally; the Lipschitz constant is upper-bounded by the product of per-layer spectral norms. During actual training, however, the spectral norms evolve dynamically. A practical remedy is to periodically estimate the encoder's empirical Lipschitz constant and incorporate it into RAA's feedback signal.
+
+\textbf{Bounded gradient divergence (Assumption~4).}
+This requires the inter-site gradient divergence to have an upper bound $G^2$. This bound is typically unknown before deployment, which is precisely why we introduce Wasserstein DRO. DRO converts the dependence on $G^2$ into a dependence on the uncertainty radius $\epsilon$, which can be set adaptively in a data-driven manner.
+
+\textbf{Cluster freezing at $T_w$.}
+The two-phase training protocol requires freezing cluster assignments at round $T_w$. If the industrial process undergoes mode drift over long-term operation, the frozen clustering structure may become invalid. Possible extensions include periodic re-clustering or online cluster adaptation mechanisms.
+
+
+%% ================================================================
+\section{Full Wasserstein DRO Dual Derivation}
+\label{sup:dro-dual}
+
+The minimax problem,
+\begin{equation}
+\min_{\mathbf{w} \in \Delta_M} \; \sup_{Q \in \mathcal{U}_\epsilon^t} \; \mathbb{E}_{Q}\bigl[\mathcal{L}(\mathbf{W}^t)\bigr],
+\end{equation}
+can be reformulated using the classical duality theorem for Wasserstein DRO. Introducing a dual variable $\mu \geq 0$, the dual form is
+\begin{equation}
+\min_{\mathbf{w} \in \Delta_M} \; \inf_{\mu \geq 0} \left\{ \mu \epsilon + \sum_{m=1}^{M} p_m \sup_{z} \bigl[ w_m z - \mu |z - \mathcal{L}_m(\mathbf{W}^t)| \bigr] \right\}.
+\end{equation}
+
+The inner $\sup_z$ admits a closed-form solution. When the loss function is linear in the weights, the dual problem simplifies further. For each site $m$, the inner optimization yields
+\begin{equation}
+\sup_{z} \bigl[ w_m z - \mu |z - \mathcal{L}_m(\mathbf{W}^t)| \bigr] =
+\begin{cases}
+w_m \mathcal{L}_m(\mathbf{W}^t) & \text{if } w_m \leq \mu, \\
++\infty & \text{if } w_m > \mu.
+\end{cases}
+\end{equation}
+
+\subsection{Theoretical Choice of Uncertainty Radius}
+
+Based on finite-sample Wasserstein DRO theory, when the number of observations is $M$ (the number of sites) and the confidence level is $1 - \beta$, a sufficient condition for
+\begin{equation}
+P\bigl(P_{\mathrm{true}} \in \mathcal{U}_\epsilon^t\bigr) \geq 1 - \beta
+\end{equation}
+is $\epsilon = O\bigl(M^{-1/\max(d_\ell, 2)} \cdot \log(1/\beta)^{1/\max(d_\ell, 2)}\bigr)$, where $d_\ell$ is the dimension of the loss value. Here $d_\ell = 1$ because each site's loss is a scalar, yielding a convergence rate of $O(M^{-1/2})$. In practice, it suffices to set $\epsilon \propto M^{-1/2}$.
+
+
+\end{document}
